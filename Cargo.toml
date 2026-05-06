@@ -2,7 +2,12 @@
 name = "dolfin-lsp-core"
 version = "0.1.4"
 edition = "2024"
+license = "MIT"
+keywords = [ "semantic-web", "ontology", "dolfin", "language", "lsp" ]
+categories = [ "compilers", "parsing" ]
 description = "Transport-agnostic LSP logic for the Dolfin language (native + WASM)"
+homepage = "https://www.dolfin.fr"
+repository = "https://github.com/dolfin-team/dolfin-lsp-core"
 
 [dependencies]
 rowl             = { version = "0.1.4", features = [] }
