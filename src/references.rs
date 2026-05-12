@@ -38,7 +38,9 @@ pub fn search(
         if spans.is_empty() {
             continue;
         }
-        let Ok(file_url) = Url::parse(file_uri_str) else { continue };
+        let Ok(file_url) = Url::parse(file_uri_str) else {
+            continue;
+        };
         for span in spans {
             locations.push(Location {
                 uri: file_url.clone(),

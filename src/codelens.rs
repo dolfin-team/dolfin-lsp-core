@@ -33,6 +33,7 @@ pub fn provide(
             rowl::Declaration::Concept(c) => (c.name.get(), c.span),
             rowl::Declaration::Property(p) => (p.name.get(), p.span),
             rowl::Declaration::Rule(r) => (&r.name, r.span),
+            rowl::Declaration::Fact(_) => continue,
         };
 
         let def_span = match def_span {
@@ -43,7 +44,9 @@ pub fn provide(
         let mut ref_locations: Vec<serde_json::Value> = Vec::new();
         for (file_uri_str, file_ast) in all_asts {
             let spans = find_references_in_file(file_ast, name);
-            let Ok(file_url) = Url::parse(file_uri_str) else { continue };
+            let Ok(file_url) = Url::parse(file_uri_str) else {
+                continue;
+            };
             for span in spans {
                 let range = span_to_range(span);
                 ref_locations.push(serde_json::json!({
@@ -65,8 +68,14 @@ pub fn provide(
 
         let decl_range = span_to_range(def_span);
         let lens_range = Range {
-            start: Position { line: decl_range.start.line, character: 0 },
-            end:   Position { line: decl_range.start.line, character: 0 },
+            start: Position {
+                line: decl_range.start.line,
+                character: 0,
+            },
+            end: Position {
+                line: decl_range.start.line,
+                character: 0,
+            },
         };
 
         let command = Command {

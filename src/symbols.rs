@@ -83,6 +83,8 @@ fn decl_to_symbol(decl: &Declaration) -> Option<DocumentSymbol> {
             })
         }
 
+        Declaration::Fact(_) => None,
+
         Declaration::Rule(r) => {
             let range = fallback_range(r.span);
             #[allow(deprecated)]

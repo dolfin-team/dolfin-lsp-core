@@ -59,7 +59,9 @@ pub fn rename(
     let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
 
     for (uri_str, ast) in &all_asts {
-        let Ok(file_uri) = Url::parse(uri_str) else { continue };
+        let Ok(file_uri) = Url::parse(uri_str) else {
+            continue;
+        };
 
         // Declaration sites (concept / property name tokens).
         for span in declaration_spans_in_file(ast, &target) {
@@ -110,6 +112,7 @@ fn declaration_spans_in_file(file: &rowl::OntologyFile, target: &str) -> Vec<Spa
                 }
             }
             Declaration::Rule(_) => {}
+            Declaration::Fact(_) => {}
         }
     }
     out
@@ -122,5 +125,8 @@ fn byte_to_position(rope: &Rope, byte_offset: usize) -> Position {
     let line = rope.char_to_line(char_idx);
     let line_start = rope.line_to_char(line);
     let col = char_idx - line_start;
-    Position { line: line as u32, character: col as u32 }
+    Position {
+        line: line as u32,
+        character: col as u32,
+    }
 }

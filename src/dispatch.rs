@@ -31,11 +31,17 @@ pub struct DispatchResult {
 
 impl DispatchResult {
     fn response_only(v: serde_json::Value) -> Self {
-        Self { response: Some(v), notifications: vec![] }
+        Self {
+            response: Some(v),
+            notifications: vec![],
+        }
     }
 
     fn notify_only(notifications: Vec<(String, serde_json::Value)>) -> Self {
-        Self { response: None, notifications }
+        Self {
+            response: None,
+            notifications,
+        }
     }
 
     fn null_response() -> Self {
@@ -423,12 +429,14 @@ fn server_capabilities() -> ServerCapabilities {
             resolve_provider: Some(false),
         }),
         semantic_tokens_provider: Some(
-            SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
-                legend: semantic::legend(),
-                full: Some(SemanticTokensFullOptions::Bool(true)),
-                range: Some(false),
-                ..Default::default()
-            }),
+            SemanticTokensServerCapabilities::SemanticTokensOptions(
+                SemanticTokensOptions {
+                    legend: semantic::legend(),
+                    full: Some(SemanticTokensFullOptions::Bool(true)),
+                    range: Some(false),
+                    ..Default::default()
+                },
+            )
         ),
         workspace: Some(WorkspaceServerCapabilities {
             workspace_folders: Some(WorkspaceFoldersServerCapabilities {

@@ -86,6 +86,7 @@ enum Context {
     AfterRule,
     AfterPrefix,
     AfterHas,
+    AfterFact,
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -130,6 +131,10 @@ pub fn full_tokens(doc: &Document) -> Option<SemanticTokens> {
                 push_kw(&mut raw, line, col, len);
                 ctx = Context::AfterHas;
             }
+            Token::Fact => {
+                push_kw(&mut raw, line, col, len);
+                ctx = Context::AfterFact;
+            }
 
             // ── Other keywords ────────────────────────────────────────────
             Token::Package
@@ -139,6 +144,7 @@ pub fn full_tokens(doc: &Document) -> Option<SemanticTokens> {
             | Token::Match
             | Token::Then
             | Token::Is
+            | Token::IsInverse
             | Token::All
             | Token::None
             | Token::AtLeast
@@ -245,6 +251,7 @@ fn classify_name(name: &str, ctx: Context, index: Option<&SymbolIndex>) -> (Opti
         Context::AfterRule => (Some(TT_MACRO), MOD_DECLARATION),
         Context::AfterPrefix => (Some(TT_NAMESPACE), MOD_DECLARATION),
         Context::AfterHas => (Some(TT_FUNCTION), 0),
+        Context::AfterFact => (Some(TT_ENUM_MEMBER), MOD_DECLARATION),
         Context::None => {
             let tt = index.and_then(|idx| classify_by_index(name, idx));
             (tt, 0)

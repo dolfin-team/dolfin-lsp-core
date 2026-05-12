@@ -1,6 +1,7 @@
 //! Hover provider — builds rich markdown for the symbol under the cursor.
 
 use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position, Range};
+use rowl::comment::CommentMap;
 use rowl::{Declaration, OntologyFile, TypeRef, error::Location};
 
 use dolfin_analysis::{Symbol, SymbolIndex, SymbolKind};
@@ -18,7 +19,7 @@ pub fn provide(doc: &Document, pos: Position) -> Option<Hover> {
     let mut loc = position_to_location(pos);
     loc.offset = byte_offset;
 
-    let (md, range) = hover_in_file(file, &analysis.index, loc)?;
+    let (md, range) = hover_in_file(file, &analysis.index, &doc.comment_map, loc)?;
     Some(Hover {
         contents: HoverContents::Markup(MarkupContent {
             kind: MarkupKind::Markdown,
@@ -33,10 +34,11 @@ pub fn provide(doc: &Document, pos: Position) -> Option<Hover> {
 fn hover_in_file(
     file: &OntologyFile,
     index: &SymbolIndex,
+    comment_map: &CommentMap,
     pos: Location,
 ) -> Option<(String, Option<Range>)> {
     for decl in &file.declarations {
-        if let Some(r) = hover_decl(decl, index, pos) {
+        if let Some(r) = hover_decl(decl, index, comment_map, pos) {
             return Some(r);
         }
     }
@@ -57,6 +59,7 @@ fn hover_in_file(
 fn hover_decl(
     decl: &Declaration,
     index: &SymbolIndex,
+    comment_map: &CommentMap,
     pos: Location,
 ) -> Option<(String, Option<Range>)> {
     match decl {
@@ -88,7 +91,13 @@ fn hover_decl(
                     ));
                 }
             }
-            Some((concept_hover(c), c.span.map(span_to_range)))
+            let md = if let Some(span) = c.span {
+                let desc = description_from_leading(comment_map.leading_comments(&span));
+                desc.unwrap_or_else(|| concept_hover(c))
+            } else {
+                concept_hover(c)
+            };
+            Some((md, c.span.map(span_to_range)))
         }
 
         Declaration::Property(p) => {
@@ -98,23 +107,34 @@ fn hover_decl(
             hover_type_ref(&p.domain, index, pos)
                 .or_else(|| hover_type_ref(&p.range, index, pos))
                 .or_else(|| {
-                    let dc = p
-                        .domain_cardinality
-                        .as_ref()
-                        .map(|c| format!("{c} "))
-                        .unwrap_or_default();
-                    let rc = p
-                        .range_cardinality
-                        .as_ref()
-                        .map(|c| format!("{c} "))
-                        .unwrap_or_default();
-                    Some((
+                    let md = if let Some(span) = p.span {
+                        description_from_leading(comment_map.leading_comments(&span))
+                    } else {
+                        None
+                    };
+                    let md = md.unwrap_or_else(|| {
+                        let dc = p
+                            .domain_cardinality
+                            .as_ref()
+                            .map(|c| format!("{c} "))
+                            .unwrap_or_default();
+                        let rc = p
+                            .range_cardinality
+                            .as_ref()
+                            .map(|c| format!("{c} "))
+                            .unwrap_or_default();
                         format!(
                             "```dolfin\nproperty {}: {}{} → {}{}\n```\n\nRelation `{}` → `{}`.",
-                            p.name.get(), dc, p.domain, rc, p.range, p.domain, p.range
-                        ),
-                        p.span.map(span_to_range),
-                    ))
+                            p.name.get(),
+                            dc,
+                            p.domain,
+                            rc,
+                            p.range,
+                            p.domain,
+                            p.range
+                        )
+                    });
+                    Some((md, p.span.map(span_to_range)))
                 })
         }
 
@@ -122,15 +142,29 @@ fn hover_decl(
             if !contains(r.span, pos) {
                 return None;
             }
-            Some((
-                format!(
+            let md = r.span
+                .and_then(|span| description_from_leading(comment_map.leading_comments(&span)))
+                .unwrap_or_else(|| format!(
                     "```dolfin\nrule {}\n```\n\n{} pattern(s), {} assertion(s).",
                     r.name,
                     r.match_block.patterns.len(),
                     r.then_block.items.len()
-                ),
-                r.span.map(span_to_range),
-            ))
+                ));
+            Some((md, r.span.map(span_to_range)))
+        }
+
+        Declaration::Fact(f) => {
+            if !contains(f.span, pos) {
+                return None;
+            }
+            let md = f.span
+                .and_then(|span| description_from_leading(comment_map.leading_comments(&span)))
+                .unwrap_or_else(|| format!(
+                    "```dolfin\nfact {} a {}\n```",
+                    f.id,
+                    f.types.iter().map(|t| t.full()).collect::<Vec<_>>().join(", ")
+                ));
+            Some((md, f.span.map(span_to_range)))
         }
     }
 }
@@ -160,6 +194,20 @@ fn hover_type_ref(
 }
 
 // ── Hover text builders ───────────────────────────────────────────────────────
+
+fn description_from_leading(comments: &[rowl::comment::Comment]) -> Option<String> {
+    let lines: Vec<&str> = comments
+        .iter()
+        .flat_map(|c| c.text.lines())
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && !l.starts_with('@'))
+        .collect();
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    }
+}
 
 fn concept_hover(c: &rowl::ConceptDef) -> String {
     let mut lines = vec![format!("concept {}:", c.name)];

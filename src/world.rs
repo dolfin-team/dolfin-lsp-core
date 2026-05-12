@@ -27,9 +27,10 @@ use dolfin_lint::engine::LintEngine;
 use lsp_types::Url;
 use ropey::Rope;
 use rowl::ast::QualifiedName;
+use rowl::comment::CommentMap;
 use rowl::{OntologyFile, PackageFile};
 use rowl::error::ParseResult;
-use rowl::parser::parse_ontology;
+use rowl::parser::{parse_ontology, parse_ontology_with_comments};
 use tracing::{debug, instrument, warn};
 
 // ── Document ──────────────────────────────────────────────────────────────────
@@ -50,6 +51,8 @@ pub struct Document {
     /// Namespace derived from the file path relative to the workspace root.
     /// `None` when the workspace root is unknown or the path cannot be mapped.
     pub namespace: Option<QualifiedName>,
+    /// Comments attached to AST nodes, used by hover to surface descriptions.
+    pub comment_map: CommentMap,
 }
 
 // ── World ─────────────────────────────────────────────────────────────────────
@@ -210,7 +213,9 @@ impl World {
             return;
         }
         let Ok(path) = uri.to_file_path() else { return };
-        let Ok(source) = std::fs::read_to_string(&path) else { return };
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            return;
+        };
         let parse = parse_ontology(&source);
         let key = Self::uri_key(uri);
 
@@ -284,7 +289,10 @@ impl World {
                     .and_then(|p| std::fs::read_to_string(p).ok())
                     .and_then(|src| {
                         let parse = parse_ontology(&src);
-                        parse.ontology.zip(ns_opt).map(|(f, ns)| (Self::uri_key(uri), ns, f))
+                        parse
+                            .ontology
+                            .zip(ns_opt)
+                            .map(|(f, ns)| (Self::uri_key(uri), ns, f))
                     })
             } else {
                 None
@@ -391,10 +399,13 @@ impl World {
         };
         if Self::is_package_manifest(uri) {
             let (parse, package) = parse_package_manifest(source);
-            Document { rope, parse, analysis: None, lint: vec![], package, namespace }
+            Document { rope, parse, analysis: None, lint: vec![], package, namespace, comment_map: CommentMap::default() }
         } else {
-            let parse = parse_ontology(source);
-            Document { rope, parse, analysis: None, lint: vec![], package: None, namespace }
+            let rowl::parser::ParseWithComments { result: parse, comments } = parse_ontology_with_comments(source);
+            let comment_map = parse.ontology.as_ref()
+                .map(|ontology| CommentMap::build(ontology, comments))
+                .unwrap_or_default();
+            Document { rope, parse, analysis: None, lint: vec![], package: None, namespace, comment_map }
         }
     }
 
@@ -511,7 +522,11 @@ fn derive_namespace(rel: &std::path::Path) -> Option<QualifiedName> {
             parts.push(s.to_lowercase());
         }
     }
-    if parts.is_empty() { None } else { Some(QualifiedName { parts, span: None }) }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(QualifiedName { parts, span: None })
+    }
 }
 
 /// Derive a namespace for a file URI by stripping the workspace root prefix
@@ -548,7 +563,11 @@ fn namespace_from_uri_path(uri: &Url) -> Option<QualifiedName> {
         .map(|s| s.strip_suffix(".dlf").unwrap_or(s).to_lowercase())
         .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
         .collect();
-    if parts.is_empty() { None } else { Some(QualifiedName { parts, span: None }) }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(QualifiedName { parts, span: None })
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
